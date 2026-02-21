@@ -6,6 +6,38 @@ import type { AnalysisResult, SessionHistoryItem, TraderType } from './types'
 
 const HISTORY_KEY = 'nb-bias-detector-history-v1'
 
+function loadHistoryDeferred(onLoaded: (items: SessionHistoryItem[]) => void) {
+  const timer = window.setTimeout(() => {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    if (!raw) return
+
+    try {
+      const parsed = JSON.parse(raw) as SessionHistoryItem[]
+      onLoaded(parsed.slice(0, 8))
+    } catch {
+      localStorage.removeItem(HISTORY_KEY)
+    }
+  }, 0)
+
+  return () => window.clearTimeout(timer)
+}
+
+function persistHistoryDeferred(items: SessionHistoryItem[]) {
+  const payload = JSON.stringify(items)
+  const idleCallback = (window as typeof window & { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
+
+  if (idleCallback) {
+    idleCallback(() => {
+      localStorage.setItem(HISTORY_KEY, payload)
+    })
+    return
+  }
+
+  window.setTimeout(() => {
+    localStorage.setItem(HISTORY_KEY, payload)
+  }, 0)
+}
+
 const traderPalette: Record<TraderType, string> = {
   'Calm Trader': '#087A67',
   'Loss Averse Trader': '#C17A00',
@@ -24,14 +56,7 @@ function App() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
 
   useEffect(() => {
-    const raw = localStorage.getItem(HISTORY_KEY)
-    if (!raw) return
-    try {
-      const parsed = JSON.parse(raw) as SessionHistoryItem[]
-      setHistory(parsed.slice(0, 8))
-    } catch {
-      localStorage.removeItem(HISTORY_KEY)
-    }
+    return loadHistoryDeferred(setHistory)
   }, [])
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,7 +109,7 @@ function App() {
     }
     const updated = [newItem, ...history].slice(0, 8)
     setHistory(updated)
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
+    persistHistoryDeferred(updated)
   }
 
   const goHome = () => {

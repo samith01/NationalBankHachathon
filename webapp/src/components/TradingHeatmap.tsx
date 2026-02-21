@@ -38,47 +38,71 @@ function TradingHeatmap({ trades }: TradingHeatmapProps) {
   const [densityMode, setDensityMode] = useState<DensityMode>('pnl')
   const [columnMode, setColumnMode] = useState<ColumnMode>('1hour')
 
-  const heatmapData = useMemo(() => {
-    const cols = getColumnCount(columnMode)
-    const labels = Array.from({ length: cols }, (_, col) => formatCellLabel(col, columnMode))
-
-    if (!trades.length) {
-      return {
-        cols,
-        labels,
-        values: new Float64Array(7 * cols),
-        counts: new Uint32Array(7 * cols),
-        maxValue: 0,
-        minValue: 0,
-      }
-    }
-
-    const sums = new Float64Array(7 * cols)
-    const counts = new Uint32Array(7 * cols)
+  const parsedTrades = useMemo(() => {
+    const parsed: Array<{ day: number; hour: number; pnl: number }> = []
 
     for (const trade of trades) {
       const date = new Date(trade.timestamp)
       if (Number.isNaN(date.getTime())) continue
-
-      const row = date.getDay()
-      const col = getColumnIndex(columnMode, date.getHours())
-      const idx = row * cols + col
-      sums[idx] += trade.profitLoss ?? 0
-      counts[idx] += 1
+      parsed.push({
+        day: date.getDay(),
+        hour: date.getHours(),
+        pnl: trade.profitLoss ?? 0,
+      })
     }
 
-    const values = new Float64Array(7 * cols)
+    return parsed
+  }, [trades])
+
+  const aggregatesByColumnMode = useMemo(() => {
+    const modes: ColumnMode[] = ['1hour', '2hour', '4hour', 'session']
+    const entries = modes.map((mode) => {
+      const cols = getColumnCount(mode)
+      return [
+        mode,
+        {
+          cols,
+          labels: Array.from({ length: cols }, (_, col) => formatCellLabel(col, mode)),
+          sums: new Float64Array(7 * cols),
+          counts: new Uint32Array(7 * cols),
+        },
+      ] as const
+    })
+
+    const result = Object.fromEntries(entries) as Record<ColumnMode, {
+      cols: number
+      labels: string[]
+      sums: Float64Array
+      counts: Uint32Array
+    }>
+
+    for (const trade of parsedTrades) {
+      for (const mode of modes) {
+        const cols = result[mode].cols
+        const col = getColumnIndex(mode, trade.hour)
+        const idx = trade.day * cols + col
+        result[mode].sums[idx] += trade.pnl
+        result[mode].counts[idx] += 1
+      }
+    }
+
+    return result
+  }, [parsedTrades])
+
+  const heatmapData = useMemo(() => {
+    const aggregate = aggregatesByColumnMode[columnMode]
+    const values = new Float64Array(aggregate.counts.length)
     let maxValue = -Infinity
     let minValue = Infinity
 
     for (let idx = 0; idx < values.length; idx += 1) {
-      const count = counts[idx]
+      const count = aggregate.counts[idx]
       if (densityMode === 'trades') {
         values[idx] = count
       } else if (densityMode === 'avgPnl') {
-        values[idx] = count > 0 ? sums[idx] / count : 0
+        values[idx] = count > 0 ? aggregate.sums[idx] / count : 0
       } else {
-        values[idx] = sums[idx]
+        values[idx] = aggregate.sums[idx]
       }
 
       if (count > 0) {
@@ -92,8 +116,15 @@ function TradingHeatmap({ trades }: TradingHeatmapProps) {
       minValue = 0
     }
 
-    return { cols, labels, values, counts, maxValue, minValue }
-  }, [trades, densityMode, columnMode])
+    return {
+      cols: aggregate.cols,
+      labels: aggregate.labels,
+      values,
+      counts: aggregate.counts,
+      maxValue,
+      minValue,
+    }
+  }, [aggregatesByColumnMode, columnMode, densityMode])
 
   const getCellColor = (value: number, count: number): { background: string; color: string } => {
     if (count === 0) return { background: 'rgba(60, 61, 64, 0.1)', color: '#68727d' }
