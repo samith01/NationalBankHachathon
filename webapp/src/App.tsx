@@ -109,7 +109,7 @@ function App() {
           </div>
           <nav aria-label="Main" className="nb-mainnav">
             {page === 'home' ? (
-              <a href="#trading-input">Bias Detection</a>
+              <a href="#trading-input"> </a>
             ) : (
               <>
                 <a href="#behavioral-profile">Profile</a>
@@ -133,7 +133,7 @@ function App() {
         <>
           <section className="hero">
             <div className="hero-copy">
-              <p className="eyebrow">National Bank Bias Detector</p>
+              <p className="eyebrow">Trading Bias Detector</p>
               <h1>Take Control of Trading Decisions</h1>
               <p>
                 Upload trade history, detect behavioral bias using ML in seconds, and receive personalized coaching for
@@ -152,29 +152,28 @@ function App() {
               <div className="control-grid">
                 <label className="upload-zone">
                   <span className="upload-kicker">Step 1</span>
-                  <strong>{isParsing ? 'Analyzing with ML Model…' : 'Upload Trading File'}</strong>
-                  <span>Drop a `.csv` file with your trading history.</span>
+                  <strong>{isParsing ? 'Reading File…' : 'Upload Trading File'}</strong>
+                  <span>Drop a `.csv`, `.xls`, or `.xlsx` file with your trading history.</span>
                   <input
                     className="file-input"
                     type="file"
                     name="trade-file"
                     aria-label="Upload trade file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     onChange={handleFile}
-                    disabled={isParsing}
                   />
-                  <small>Required columns: timestamp, asset, side, quantity, entry_price, exit_price, profit_loss, balance</small>
+                  <small>Required fields: timestamp, buy/sell, asset, quantity, entry/exit, P/L, account balance.</small>
                 </label>
                 <article className="upload-notes" aria-label="Upload notes">
-                  <h3>How It Works</h3>
+                  <h3>Before You Upload</h3>
                   <ul>
-                    <li>Upload your CSV with one trade per row</li>
-                    <li>ML model analyzes your trading patterns in real-time</li>
-                    <li>Get personalized insights in seconds</li>
+                    <li>Use one trade per row.</li>
+                    <li>Numbers can include decimals.</li>
+                    <li>Missing values are flagged under Data Integrity Notes.</li>
                   </ul>
                   <p>
-                    Powered by XGBoost machine learning with 97%+ accuracy in detecting behavioral biases.
-                    Backend server must be running on localhost:8000.
+                    This keeps the workflow simple and aligned with the challenge: file-based trading history input and
+                    fast personalized analysis.
                   </p>
                 </article>
               </div>
