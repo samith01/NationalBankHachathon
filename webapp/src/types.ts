@@ -49,6 +49,7 @@ export interface AnalysisResult {
     averageLoss: number
     tradesPerHour: number
     maxHourlyTrades: number
+    totalProfitLoss: number
   }
   chartData: {
     cumulativePnL: number[]

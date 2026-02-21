@@ -199,12 +199,13 @@ export function mapApiResponseToAnalysis(
       ? 'Consider diversifying across multiple timeframes and reducing single-trade exposure'
       : 'Maintain current portfolio allocation with periodic rebalancing',
     metrics: {
-      totalTrades: trades.length,
-      winRate,
+      totalTrades: apiResponse.summary.total_trades || trades.length,
+      winRate: apiResponse.summary.win_rate ?? winRate,
       averageWin,
       averageLoss,
       tradesPerHour,
       maxHourlyTrades,
+      totalProfitLoss: apiResponse.summary.total_profit_loss ?? cumulative,
     },
     chartData: {
       cumulativePnL,

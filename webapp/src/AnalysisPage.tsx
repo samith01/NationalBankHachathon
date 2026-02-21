@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import type { AnalysisResult, BiasKey, SessionHistoryItem } from './types'
 
 const round = (value: number) => Math.round(value * 100) / 100
@@ -256,10 +255,7 @@ function PnLDistribution({ trades }: { trades: AnalysisResult['trades'] }) {
 }
 
 export default function AnalysisPage({ analysis, history, onBack, onSave, onLoadHistory }: AnalysisPageProps) {
-    const totalPnL = useMemo(() => {
-        const vals = analysis.chartData.cumulativePnL
-        return vals.length ? vals[vals.length - 1] : 0
-    }, [analysis])
+    const totalPnL = analysis.metrics.totalProfitLoss
 
     return (
         <>
