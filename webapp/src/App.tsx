@@ -198,6 +198,30 @@ function App() {
           onLoadHistory={(a) => setAnalysis(a)}
         />
       )}
+
+      {isParsing && (
+        <div className="loading-overlay">
+          <div className="loading-container">
+            <div className="spinner" />
+            <h2 className="loading-title">Analyzing Your Trading Data</h2>
+            <p className="loading-subtitle">Processing trades and detecting behavioral patterns...</p>
+            <div className="progress-steps">
+              <div className="progress-step active">
+                <span className="step-number">1</span>
+                <span className="step-label">Parsing File</span>
+              </div>
+              <div className="progress-step active">
+                <span className="step-number">2</span>
+                <span className="step-label">ML Analysis</span>
+              </div>
+              <div className="progress-step">
+                <span className="step-number">3</span>
+                <span className="step-label">Generating Report</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,49 +3,35 @@ import polars as pl
 import xgboost as xgb
 
 
-def prepare_features(df: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    work_df = df.with_columns(
-        pl.when(pl.col("profit_loss").is_null())
-        .then(pl.col("exit_price") - pl.col("entry_price"))
-        .otherwise(pl.col("profit_loss"))
-        .alias("profit_loss")
-    ).drop_nulls(subset=["quantity", "side", "timestamp", "entry_price", "exit_price"])
+# Load datasets
+print("\n📊 Loading datasets...")
+calm = pd.read_csv('../../datasets/calm_trader.csv')
+calm['trader_type'] = 0
 
-    if "balance" in work_df.columns:
-        work_df = work_df.drop("balance")
+loss_averse = pd.read_csv('../../datasets/loss_averse_trader.csv')
+loss_averse['trader_type'] = 1
 
-    work_df = work_df.with_columns(
-        pl.col("timestamp").cast(pl.Utf8).str.strptime(pl.Datetime, strict=False).alias("timestamp")
-    ).sort("timestamp")
+overtrader = pd.read_csv('../../datasets/overtrader.csv')
+overtrader['trader_type'] = 2
 
-    work_df = work_df.with_columns(
-        [
-            (pl.col("side") == "BUY").cast(pl.Int64).alias("side_encoded"),
-            pl.col("profit_loss").cast(pl.Float64, strict=False).alias("profit_loss_actual"),
-            (pl.col("profit_loss").cast(pl.Float64, strict=False) > 0)
-            .cast(pl.Int64)
-            .alias("is_profit"),
-            pl.when(pl.col("profit_loss").cast(pl.Float64, strict=False) < 0)
-            .then(pl.col("profit_loss").cast(pl.Float64, strict=False).abs())
-            .otherwise(0.0)
-            .alias("loss_amount"),
-            (
-                pl.col("exit_price").cast(pl.Float64, strict=False)
-                - pl.col("entry_price").cast(pl.Float64, strict=False)
-            ).alias("price_range"),
-            (
-                (
-                    pl.col("exit_price").cast(pl.Float64, strict=False)
-                    - pl.col("entry_price").cast(pl.Float64, strict=False)
-                )
-                / (pl.col("entry_price").cast(pl.Float64, strict=False).abs() + 1e-6)
-                * 100
-            ).alias("price_range_pct"),
-            (
-                pl.col("quantity").cast(pl.Float64, strict=False)
-                * pl.col("entry_price").cast(pl.Float64, strict=False)
-            ).alias("trade_value"),
-        ]
+revenge = pd.read_csv('../../datasets/revenge_trader.csv')
+revenge['trader_type'] = 3
+
+# Combine
+df = pd.concat([calm, loss_averse, overtrader, revenge], ignore_index=True)
+print(f"✓ Combined dataset: {len(df)} total rows")
+
+# Smart data cleaning
+print("\nCleaning data...")
+initial_rows = len(df)
+
+# Handle missing profit_loss
+if df['profit_loss'].isna().any():
+    missing_pl = df['profit_loss'].isna().sum()
+    print(f"  - Calculating {missing_pl} missing profit_loss values")
+    df.loc[df['profit_loss'].isna(), 'profit_loss'] = (
+        df.loc[df['profit_loss'].isna(), 'exit_price'] - 
+        df.loc[df['profit_loss'].isna(), 'entry_price']
     )
 
     for window in [20, 50]:
@@ -156,23 +142,32 @@ def train_test_split(
     return x_values[train_idx], x_values[test_idx], y_values[train_idx], y_values[test_idx]
 
 
-def main() -> None:
-    calm = pl.read_csv("../../datasets/patched/calm_trader.csv").with_columns(
-        pl.lit(0).alias("trader_type")
-    )
-    loss_averse = pl.read_csv("../../datasets/patched/loss_averse_trader.csv").with_columns(
-        pl.lit(1).alias("trader_type")
-    )
-    overtrader = pl.read_csv("../../datasets/patched/overtrader.csv").with_columns(
-        pl.lit(2).alias("trader_type")
-    )
-    revenge = pl.read_csv("../../datasets/patched/revenge_trader.csv").with_columns(
-        pl.lit(3).alias("trader_type")
-    )
+# ============================================================================
+# OPTIMIZED MODEL
+# ============================================================================
+print("\n🚀 Training XGBoost model...")
+model = xgb.XGBClassifier(
+    n_estimators=1000,
+    max_depth=6,
+    learning_rate=0.05,
+    subsample=0.85,
+    colsample_bytree=0.85,
+    reg_alpha=0.5,
+    reg_lambda=2.0,
+    min_child_weight=2,
+    gamma=1.0,
+    random_state=42,
+    verbosity=0,
+    eval_metric='mlogloss',
+    scale_pos_weight=1
+)
 
-    all_df = pl.concat([calm, loss_averse, overtrader, revenge], how="vertical")
-    x_matrix, y_values = prepare_features(all_df)
-    x_train, x_test, y_train, y_test = train_test_split(x_matrix, y_values, test_ratio=0.2, seed=42)
+model.fit(
+    X_train, y_train,
+    sample_weight=sample_weights,
+    eval_set=[(X_test, y_test)],
+    verbose=True
+)
 
     dtrain = xgb.DMatrix(x_train, label=y_train)
     dtest = xgb.DMatrix(x_test, label=y_test)
@@ -200,9 +195,7 @@ def main() -> None:
     accuracy = float((preds == y_test).mean())
     print(f"Accuracy: {accuracy:.4f}")
 
-    booster.save_model("trader_classifier.json")
-    print("Saved trader_classifier.json")
-
-
-if __name__ == "__main__":
-    main()
+# Save model
+model.save_model('trader_classifier2.json')
+print("\n✓ Model saved as trader_classifier2.json")
+print("=" * 80)
