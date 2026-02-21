@@ -15,7 +15,7 @@ from .schemas import (
 )
 
 MAX_CUMULATIVE_POINTS = 1200
-PNL_HISTOGRAM_BINS = 20
+PNL_HISTOGRAM_BINS = 60
 
 RECOMMENDATIONS_MAP = {
     "calm_trader": [

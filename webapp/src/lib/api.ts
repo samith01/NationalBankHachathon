@@ -360,7 +360,7 @@ export function mapApiResponseToAnalysis(
       pnlDistribution: payload?.pnl_distribution ?? {
         min: 0,
         max: 0,
-        buckets: new Array<number>(20).fill(0),
+        buckets: new Array<number>(60).fill(0),
       },
     },
     heatmap: payload

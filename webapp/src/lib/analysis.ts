@@ -324,7 +324,7 @@ export const analyzeTrades = (trades: Trade[]): AnalysisResult => {
   let pnlDistribution = {
     min: 0,
     max: 0,
-    buckets: new Array<number>(20).fill(0),
+    buckets: new Array<number>(60).fill(0),
   }
 
   if (nonZeroPnL.length > 0) {
@@ -334,7 +334,7 @@ export const analyzeTrades = (trades: Trade[]): AnalysisResult => {
       if (value < min) min = value
       if (value > max) max = value
     }
-    const bins = 20
+    const bins = 60
     const width = (max - min) / bins || 1
     const buckets = new Array<number>(bins).fill(0)
     for (const value of nonZeroPnL) {
