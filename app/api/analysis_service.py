@@ -1,18 +1,10 @@
 import numpy as np
-import pandas as pd
 import polars as pl
 import xgboost as xgb
 
 from . import state
 from .data_service import get_last_numeric_value
 from .schemas import BiasDetectionResult, MetricsRecord, TraderAnalysis
-
-TRADER_TYPES = {
-    0: "calm_trader",
-    1: "loss_averse_trader",
-    2: "overtrader",
-    3: "revenge_trader",
-}
 
 RECOMMENDATIONS_MAP = {
     "calm_trader": [
@@ -61,10 +53,6 @@ def detect_revenge_trading(df: pl.DataFrame) -> TraderAnalysis:
 
 
 def predict_trader_type_analysis(df: pl.DataFrame) -> TraderAnalysis:
-    """
-    Predict trader type using XGBoost model.
-    Integrates test.py logic for feature engineering.
-    """
     if state.model is None or len(df) == 0:
         return {
             "type": "Trader Type Prediction",
@@ -80,181 +68,129 @@ def predict_trader_type_analysis(df: pl.DataFrame) -> TraderAnalysis:
         }
 
     try:
-        # Convert Polars to Pandas for easier feature engineering (matching test.py)
-        pdf = df.to_pandas()
-        
-        # Data cleaning - matching test.py exactly
-        pdf["timestamp"] = pd.to_datetime(pdf["timestamp"], errors="coerce")
-        
-        # Handle missing profit_loss
-        mask_null_pl = pdf["profit_loss"].isna()
-        if mask_null_pl.any():
-            pdf.loc[mask_null_pl, "profit_loss"] = (
-                pdf.loc[mask_null_pl, "exit_price"] - pdf.loc[mask_null_pl, "entry_price"]
-            )
-        
-        # Drop rows with missing critical columns
-        critical_cols = ["quantity", "side", "timestamp", "entry_price", "exit_price"]
-        pdf = pdf.dropna(subset=critical_cols)
-        
-        # Remove balance column
-        if "balance" in pdf.columns:
-            pdf = pdf.drop("balance", axis=1)
-        
-        # Sort by timestamp
-        pdf = pdf.sort_values("timestamp").reset_index(drop=True)
-        
-        if len(pdf) == 0:
-            return {
-                "type": "Trader Type Prediction",
-                "confidence_score": 0.0,
-                "description": "Insufficient data after cleaning.",
-                "recommendations": [],
-                "all_bias_scores": {
-                    "calm_trader": 0.0,
-                    "loss_averse_trader": 0.0,
-                    "overtrader": 0.0,
-                    "revenge_trader": 0.0,
-                },
-            }
-        
-        # === BASIC FEATURES - matching test.py ===
-        pdf["side_encoded"] = (pdf["side"] == "BUY").astype(int)
-        pdf["profit_loss_actual"] = pdf["profit_loss"]
-        pdf["is_profit"] = (pdf["profit_loss"] > 0).astype(int)
-        pdf["loss_amount"] = pdf["profit_loss"].apply(lambda x: abs(x) if x < 0 else 0)
-        
-        pdf["price_range"] = pdf["exit_price"] - pdf["entry_price"]
-        pdf["price_range_pct"] = (
-            (pdf["price_range"] / (pdf["entry_price"].abs() + 1e-6)) * 100
+        work_df = df.clone()
+        work_df = work_df.with_columns(
+            pl.when(pl.col("profit_loss").is_null())
+            .then(pl.col("exit_price") - pl.col("entry_price"))
+            .otherwise(pl.col("profit_loss"))
+            .alias("profit_loss")
         )
-        pdf["trade_value"] = pdf["quantity"] * pdf["entry_price"]
-        
-        # === WINDOWED BEHAVIORAL PATTERNS - matching test.py (windows: 20, 50) ===
-        window_sizes = [20, 50]
-        
-        for window in window_sizes:
-            pdf[f"win_rate_{window}"] = (
-                pdf["is_profit"].rolling(window, min_periods=1).mean().fillna(0.5)
+
+        critical_cols = ["quantity", "side", "timestamp", "entry_price", "exit_price"]
+        work_df = work_df.drop_nulls(subset=critical_cols)
+        if "balance" in work_df.columns:
+            work_df = work_df.drop("balance")
+
+        work_df = work_df.with_columns(
+            pl.col("timestamp")
+            .cast(pl.Utf8)
+            .str.strptime(pl.Datetime, strict=False)
+            .alias("timestamp")
+        ).sort("timestamp")
+
+        work_df = work_df.with_columns(
+            [
+                (pl.col("side") == "BUY").cast(pl.Int64).alias("side_encoded"),
+                pl.col("profit_loss").cast(pl.Float64, strict=False).alias("profit_loss_actual"),
+                (pl.col("profit_loss").cast(pl.Float64, strict=False) > 0)
+                .cast(pl.Int64)
+                .alias("is_profit"),
+                pl.when(pl.col("profit_loss").cast(pl.Float64, strict=False) < 0)
+                .then(pl.col("profit_loss").cast(pl.Float64, strict=False).abs())
+                .otherwise(0.0)
+                .alias("loss_amount"),
+                (
+                    pl.col("exit_price").cast(pl.Float64, strict=False)
+                    - pl.col("entry_price").cast(pl.Float64, strict=False)
+                ).alias("price_range"),
+                (
+                    (
+                        pl.col("exit_price").cast(pl.Float64, strict=False)
+                        - pl.col("entry_price").cast(pl.Float64, strict=False)
+                    )
+                    / (pl.col("entry_price").cast(pl.Float64, strict=False).abs() + 1e-6)
+                    * 100
+                ).alias("price_range_pct"),
+                (
+                    pl.col("quantity").cast(pl.Float64, strict=False)
+                    * pl.col("entry_price").cast(pl.Float64, strict=False)
+                ).alias("trade_value"),
+            ]
+        )
+
+        for window in [20, 50]:
+            work_df = work_df.with_columns(
+                [
+                    pl.col("is_profit")
+                    .cast(pl.Float64)
+                    .rolling_mean(window_size=window, min_samples=1)
+                    .alias(f"win_rate_{window}"),
+                    pl.col("quantity")
+                    .cast(pl.Float64, strict=False)
+                    .rolling_mean(window_size=window, min_samples=1)
+                    .alias(f"avg_qty_{window}"),
+                    pl.col("quantity")
+                    .cast(pl.Float64, strict=False)
+                    .rolling_std(window_size=window, min_samples=1)
+                    .fill_null(0.0)
+                    .alias(f"qty_volatility_{window}"),
+                    pl.col("quantity")
+                    .cast(pl.Float64, strict=False)
+                    .rolling_max(window_size=window, min_samples=1)
+                    .alias(f"qty_max_{window}"),
+                    pl.col("profit_loss")
+                    .cast(pl.Float64, strict=False)
+                    .rolling_mean(window_size=window, min_samples=1)
+                    .alias(f"avg_profit_{window}"),
+                    pl.col("profit_loss")
+                    .cast(pl.Float64, strict=False)
+                    .rolling_std(window_size=window, min_samples=1)
+                    .fill_null(0.0)
+                    .alias(f"profit_std_{window}"),
+                    pl.col("profit_loss")
+                    .cast(pl.Float64, strict=False)
+                    .rolling_min(window_size=window, min_samples=1)
+                    .alias(f"max_drawdown_{window}"),
+                    pl.col("side_encoded")
+                    .cast(pl.Float64)
+                    .rolling_mean(window_size=window, min_samples=1)
+                    .alias(f"buy_ratio_{window}"),
+                ]
             )
-            pdf[f"avg_qty_{window}"] = (
-                pdf["quantity"].rolling(window, min_periods=1).mean().fillna(pdf["quantity"].mean())
-            )
-            pdf[f"qty_volatility_{window}"] = (
-                pdf["quantity"].rolling(window, min_periods=1).std().fillna(0)
-            )
-            pdf[f"qty_max_{window}"] = (
-                pdf["quantity"].rolling(window, min_periods=1).max().fillna(0)
-            )
-            
-            pdf[f"avg_profit_{window}"] = (
-                pdf["profit_loss"].rolling(window, min_periods=1).mean().fillna(0)
-            )
-            pdf[f"profit_std_{window}"] = (
-                pdf["profit_loss"].rolling(window, min_periods=1).std().fillna(0)
-            )
-            pdf[f"max_drawdown_{window}"] = (
-                pdf["profit_loss"].rolling(window, min_periods=1).min().fillna(0)
-            )
-            
-            pdf[f"buy_ratio_{window}"] = (
-                pdf["side_encoded"].rolling(window, min_periods=1).mean().fillna(0.5)
-            )
-        
-        # === LOSS AVERSION INDICATORS - matching test.py ===
-        early_close = []
-        for idx in range(len(pdf)):
+
+        profit_loss_vals = (
+            work_df.get_column("profit_loss")
+            .cast(pl.Float64, strict=False)
+            .fill_null(0.0)
+            .to_list()
+        )
+        quantity_vals = (
+            work_df.get_column("quantity").cast(pl.Float64, strict=False).fill_null(0.0).to_list()
+        )
+
+        early_close: list[int] = []
+        qty_after_loss: list[float] = []
+        for idx in range(work_df.height):
             if idx > 0:
-                prev_profit = pdf.loc[idx - 1, "profit_loss"]
-                curr_profit = pdf.loc[idx, "profit_loss"]
-                if prev_profit > 0 and curr_profit > prev_profit:
-                    early_close.append(1)
+                prev_profit = float(profit_loss_vals[idx - 1])
+                curr_profit = float(profit_loss_vals[idx])
+                early_close.append(1 if (prev_profit > 0 and curr_profit > prev_profit) else 0)
+                if prev_profit < 0:
+                    qty_ratio = float(quantity_vals[idx]) / (float(quantity_vals[idx - 1]) + 1e-6)
+                    qty_after_loss.append(qty_ratio)
                 else:
-                    early_close.append(0)
+                    qty_after_loss.append(0.0)
             else:
                 early_close.append(0)
-        pdf["early_close_indicator"] = early_close
-        
-        # === REVENGE TRADING INDICATORS - matching test.py ===
-        qty_after_loss = []
-        for idx in range(len(pdf)):
-            if idx > 0 and pdf.loc[idx - 1, "profit_loss"] < 0:
-                qty_ratio = pdf.loc[idx, "quantity"] / (pdf.loc[idx - 1, "quantity"] + 1e-6)
-                qty_after_loss.append(qty_ratio)
-            else:
                 qty_after_loss.append(0.0)
-        pdf["qty_after_loss"] = qty_after_loss
-        
-        # === PREPARE FEATURES FOR PREDICTION - matching test.py ===
-        features = [
-            col
-            for col in pdf.columns
-            if col not in ["timestamp", "asset", "side", "profit_loss", "exit_price", "entry_price"]
-        ]
-        
-        X = pdf[features].fillna(0).replace([np.inf, -np.inf], 0)
-        
-        # Make predictions using the model
-        predictions = state.model.predict(X)
-        probabilities = state.model.predict_proba(X)
-        
-        print(f"🔍 Predictions generated for {len(predictions)} trades")
-        print(f"   Prediction distribution: {dict(zip(*np.unique(predictions, return_counts=True)))}")
-        print(f"   Probability shape: {probabilities.shape}")
-        
-        # Get most common trader type
-        unique, counts = np.unique(predictions, return_counts=True)
-        most_common_idx = unique[np.argmax(counts)]
-        most_common_type = TRADER_TYPES[most_common_idx]
-        confidence = np.max(probabilities, axis=1).mean()
-        
-        print(f"   Most common type: {most_common_type} (confidence: {confidence:.2%})")
-        
-        # Calculate bias scores based on prediction distribution and confidence
-        # For each class: (% of trades predicted as this class) * (avg confidence for that class)
-        all_bias_scores = {}
-        for class_idx in range(len(TRADER_TYPES)):
-            # Trades predicted as this class
-            class_mask = predictions == class_idx
-            if class_mask.any():
-                # Percentage of trades predicted as this class
-                class_percentage = class_mask.sum() / len(predictions)
-                # Average confidence when predicting this class
-                class_confidence = probabilities[class_mask, class_idx].mean()
-                # Combined score
-                score = float(class_percentage * class_confidence)
-                all_bias_scores[TRADER_TYPES[class_idx]] = score
-                print(f"   {TRADER_TYPES[class_idx]}: {class_percentage:.1%} trades × {class_confidence:.2%} confidence = {score:.3f}")
-            else:
-                all_bias_scores[TRADER_TYPES[class_idx]] = 0.0
-                print(f"   {TRADER_TYPES[class_idx]}: 0% trades = 0.000")
-        
-        return {
-            "type": f"Trader Type: {most_common_type.replace('_', ' ').title()}",
-            "confidence_score": float(confidence),
-            "description": BIAS_DESCRIPTIONS.get(most_common_type, "Unknown trader type"),
-            "recommendations": RECOMMENDATIONS_MAP.get(most_common_type, []),
-            "all_bias_scores": all_bias_scores,
-        }
-        
-    except Exception as e:
-        print(f"Error in predict_trader_type_analysis: {e}")
-        import traceback
-        traceback.print_exc()
-        return {
-            "type": "Trader Type Prediction",
-            "confidence_score": 0.0,
-            "description": f"Error during prediction: {str(e)}",
-            "recommendations": [],
-            "all_bias_scores": {
-                "calm_trader": 0.0,
-                "loss_averse_trader": 0.0,
-                "overtrader": 0.0,
-                "revenge_trader": 0.0,
-            },
-        }
 
-        # Select features (must match training features)
+        work_df = work_df.with_columns(
+            [
+                pl.Series("early_close_indicator", early_close),
+                pl.Series("qty_after_loss", qty_after_loss),
+            ]
+        )
+
         features = [
             col
             for col in work_df.columns
