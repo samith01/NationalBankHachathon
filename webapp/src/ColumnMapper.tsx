@@ -92,7 +92,7 @@ export default function ColumnMapper({
                 </button>
                 <button
                     type="button"
-                    className="action mapper-confirm"
+                    className="mapper-confirm"
                     disabled={!allRequiredMapped}
                     onClick={() => onConfirm(mapping)}
                 >

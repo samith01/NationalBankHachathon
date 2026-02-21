@@ -137,7 +137,7 @@ function App() {
           </div>
           <nav aria-label="Main" className="nb-mainnav">
             {page === 'home' ? (
-              <a href="#trading-input">Bias Detection</a>
+              <a href="#trading-input"> </a>
             ) : (
               <>
                 <a href="#behavioral-profile">Profile</a>
@@ -161,7 +161,7 @@ function App() {
         <>
           <section className="hero">
             <div className="hero-copy">
-              <p className="eyebrow">National Bank Bias Detector</p>
+              <p className="eyebrow">Trading Bias Detector</p>
               <h1>Take Control of Trading Decisions</h1>
               <p>
                 Upload trade history, detect behavioral bias in seconds, and receive personalized coaching for
@@ -177,34 +177,20 @@ function App() {
           <main id="main-content" className="layout">
             <section id="trading-input" className="card controls">
               <h2>Trading History Input</h2>
-              <div className="control-grid">
-                <label className="upload-zone">
-                  <span className="upload-kicker">Step 1</span>
-                  <strong>{isParsing ? 'Reading File…' : 'Upload Trading File'}</strong>
-                  <span>Drop a `.csv`, `.xls`, or `.xlsx` file with your trading history.</span>
-                  <input
-                    className="file-input"
-                    type="file"
-                    name="trade-file"
-                    aria-label="Upload trade file"
-                    accept=".csv,.xlsx,.xls"
-                    onChange={handleFile}
-                  />
-                  <small>Required fields: timestamp, buy/sell, asset, quantity, entry/exit, P/L, account balance.</small>
-                </label>
-                <article className="upload-notes" aria-label="Upload notes">
-                  <h3>Before You Upload</h3>
-                  <ul>
-                    <li>Use one trade per row.</li>
-                    <li>Numbers can include decimals.</li>
-                    <li>Missing values are flagged under Data Integrity Notes.</li>
-                  </ul>
-                  <p>
-                    This keeps the workflow simple and aligned with the challenge: file-based trading history input and
-                    fast personalized analysis.
-                  </p>
-                </article>
-              </div>
+              <label className="upload-zone">
+                <span className="upload-kicker">Step 1</span>
+                <strong>{isParsing ? 'Reading File…' : 'Upload Trading File'}</strong>
+                <span>Drop a `.csv`, `.xls`, or `.xlsx` file with your trading history.</span>
+                <input
+                  className="file-input"
+                  type="file"
+                  name="trade-file"
+                  aria-label="Upload trade file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFile}
+                />
+                <small>Required fields: timestamp, buy/sell, asset, quantity, entry/exit, P/L, account balance.</small>
+              </label>
 
               {parseIssues.length > 0 && (
                 <ul className="issue-list" aria-live="polite">
