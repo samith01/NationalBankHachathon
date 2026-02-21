@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from typing import Callable, cast
+from typing import Callable
 
 import polars as pl
 
@@ -164,9 +164,7 @@ def _build_corrected_df(
     columns: list[pl.Series] = []
     for column_name in df.columns:
         if column_name in replacements:
-            columns.append(
-                pl.Series(column_name, replacements[column_name], dtype=pl.Float64)
-            )
+            columns.append(pl.Series(column_name, replacements[column_name], dtype=pl.Float64))
         else:
             columns.append(df.get_column(column_name).clone())
     return pl.DataFrame(columns)
@@ -198,21 +196,26 @@ def _analyze_dataframe(
     if len(raw_rows) != df.height:
         raise ValueError("Row count mismatch while loading raw CSV values")
 
-    quantity = cast(
-        list[float | None], df["quantity"].cast(pl.Float64, strict=False).to_list()
-    )
-    entry_price = cast(
-        list[float | None], df["entry_price"].cast(pl.Float64, strict=False).to_list()
-    )
-    exit_price = cast(
-        list[float | None], df["exit_price"].cast(pl.Float64, strict=False).to_list()
-    )
-    profit_loss = cast(
-        list[float | None], df["profit_loss"].cast(pl.Float64, strict=False).to_list()
-    )
-    balance = cast(
-        list[float | None], df["balance"].cast(pl.Float64, strict=False).to_list()
-    )
+    quantity = [
+        None if value is None else float(value)
+        for value in df["quantity"].cast(pl.Float64, strict=False).to_list()
+    ]
+    entry_price = [
+        None if value is None else float(value)
+        for value in df["entry_price"].cast(pl.Float64, strict=False).to_list()
+    ]
+    exit_price = [
+        None if value is None else float(value)
+        for value in df["exit_price"].cast(pl.Float64, strict=False).to_list()
+    ]
+    profit_loss = [
+        None if value is None else float(value)
+        for value in df["profit_loss"].cast(pl.Float64, strict=False).to_list()
+    ]
+    balance = [
+        None if value is None else float(value)
+        for value in df["balance"].cast(pl.Float64, strict=False).to_list()
+    ]
 
     corrected_quantity = list(quantity)
     corrected_entry_price = list(entry_price)
@@ -289,7 +292,11 @@ def _analyze_dataframe(
         if values["quantity"] is None:
             if values["entry_price"] is not None and values["exit_price"] is not None:
                 set_recovered("quantity", fallback_quantity, "(fallback assumption)")
-            elif values["profit_loss"] is not None and values["entry_price"] is None and values["exit_price"] is not None:
+            elif (
+                values["profit_loss"] is not None
+                and values["entry_price"] is None
+                and values["exit_price"] is not None
+            ):
                 set_recovered("quantity", fallback_quantity, "(fallback assumption)")
                 quantity_now = values["quantity"]
                 if quantity_now is not None:
@@ -298,7 +305,11 @@ def _analyze_dataframe(
                         values["exit_price"] - (values["profit_loss"] / quantity_now),
                         f"(derived using fallback quantity={fallback_quantity})",
                     )
-            elif values["profit_loss"] is not None and values["exit_price"] is None and values["entry_price"] is not None:
+            elif (
+                values["profit_loss"] is not None
+                and values["exit_price"] is None
+                and values["entry_price"] is not None
+            ):
                 set_recovered("quantity", fallback_quantity, "(fallback assumption)")
                 quantity_now = values["quantity"]
                 if quantity_now is not None:

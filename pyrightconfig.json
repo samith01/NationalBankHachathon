@@ -1,0 +1,14 @@
+{
+  "include": [
+    "app"
+  ],
+  "venvPath": "app",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "app",
+      "pythonVersion": "3.14"
+    }
+  ],
+  "typeCheckingMode": "strict"
+}
