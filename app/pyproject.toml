@@ -6,4 +6,5 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi>=0.129.1",
+    "polars>=1.38.1",
 ]

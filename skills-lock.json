@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "quant-analyst": {
+      "source": "404kidwiz/claude-supercode-skills",
+      "sourceType": "github",
+      "computedHash": "99ada7f2ca8d29ba2c74ef7a5e82383a5a9c0797eda657a4c85200b947b58d8a"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "a6a44d5498f7e8f68289902f3dedfc6f38ae0cee1e96527c80724cf27f727c2a"
+    }
+  }
+}
