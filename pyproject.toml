@@ -1,9 +1,0 @@
-[project]
-name = "hackathon2"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.14"
-dependencies = [
-    "fastapi>=0.129.1",
-]
