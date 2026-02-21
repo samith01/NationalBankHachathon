@@ -36,6 +36,19 @@ interface ApiAnalysisResponse {
   }
 }
 
+const MAX_RENDER_TRADES = 4000
+const MAX_CUMULATIVE_POINTS = 1200
+
+function evenlySample<T>(items: T[], maxPoints: number): T[] {
+  if (items.length <= maxPoints) return items
+  const step = (items.length - 1) / (maxPoints - 1)
+  const sampled: T[] = []
+  for (let i = 0; i < maxPoints; i += 1) {
+    sampled.push(items[Math.round(i * step)])
+  }
+  return sampled
+}
+
 export async function uploadTradingHistory(file: File): Promise<string> {
   const formData = new FormData()
   formData.append('file', file)
@@ -65,8 +78,8 @@ export async function analyzeTrading(sessionId: string): Promise<ApiAnalysisResp
   return response.json()
 }
 
-export async function getTrades(sessionId: string): Promise<Trade[]> {
-  const response = await fetch(`${API_BASE_URL}/data/${sessionId}`)
+export async function getTrades(sessionId: string, signal?: AbortSignal): Promise<Trade[]> {
+  const response = await fetch(`${API_BASE_URL}/data/${sessionId}`, { signal })
 
   if (!response.ok) {
     const detail = await readErrorDetails(response)
@@ -99,32 +112,47 @@ export function mapApiResponseToAnalysis(
     biasMap[normalizedType] = bias.confidence_score * 100 // Convert 0-1 to 0-100
   })
 
-  // Calculate local metrics for visualization
-  const timestamps = trades.map((trade) => new Date(trade.timestamp).getTime())
-  const first = timestamps[0] ?? Date.now()
-  const last = timestamps[timestamps.length - 1] ?? first + 60 * 60 * 1000
+  const hourlyActivity = new Array<number>(24).fill(0)
+  const cumulativePnLRaw: number[] = []
+  let cumulative = 0
+  let firstTimestamp = Number.NaN
+  let lastTimestamp = Number.NaN
+  let winCount = 0
+  let winSum = 0
+  let lossCount = 0
+  let lossSum = 0
+
+  for (const trade of trades) {
+    const timestamp = new Date(trade.timestamp).getTime()
+    if (Number.isFinite(timestamp)) {
+      if (Number.isNaN(firstTimestamp)) firstTimestamp = timestamp
+      lastTimestamp = timestamp
+      hourlyActivity[new Date(timestamp).getHours()] += 1
+    }
+
+    const pnl = trade.profitLoss ?? 0
+    if (pnl > 0) {
+      winCount += 1
+      winSum += pnl
+    } else if (pnl < 0) {
+      lossCount += 1
+      lossSum += pnl
+    }
+
+    cumulative += pnl
+    cumulativePnLRaw.push(cumulative)
+  }
+
+  const first = Number.isNaN(firstTimestamp) ? Date.now() : firstTimestamp
+  const last = Number.isNaN(lastTimestamp) ? first + 60 * 60 * 1000 : lastTimestamp
   const tradingHours = Math.max((last - first) / (1000 * 60 * 60), 1)
   const tradesPerHour = trades.length / tradingHours
-
-  const hourlyActivity = new Array<number>(24).fill(0)
-  trades.forEach((trade) => {
-    const hour = new Date(trade.timestamp).getHours()
-    hourlyActivity[hour] += 1
-  })
   const maxHourlyTrades = Math.max(...hourlyActivity)
-
-  const wins = trades.filter((t) => (t.profitLoss ?? 0) > 0)
-  const losses = trades.filter((t) => (t.profitLoss ?? 0) < 0)
-  const winRate = trades.length > 0 ? (wins.length / trades.length) * 100 : 0
-  const averageWin = wins.length > 0 ? wins.reduce((sum, t) => sum + (t.profitLoss ?? 0), 0) / wins.length : 0
-  const averageLoss = losses.length > 0 ? Math.abs(losses.reduce((sum, t) => sum + (t.profitLoss ?? 0), 0) / losses.length) : 0
-
-  // Calculate cumulative P/L
-  let cumulative = 0
-  const cumulativePnL = trades.map((trade) => {
-    cumulative += trade.profitLoss ?? 0
-    return cumulative
-  })
+  const winRate = trades.length > 0 ? (winCount / trades.length) * 100 : 0
+  const averageWin = winCount > 0 ? winSum / winCount : 0
+  const averageLoss = lossCount > 0 ? Math.abs(lossSum / lossCount) : 0
+  const cumulativePnL = evenlySample(cumulativePnLRaw, MAX_CUMULATIVE_POINTS)
+  const chartTrades = evenlySample(trades, MAX_RENDER_TRADES)
 
   // Determine primary trader type from highest scoring bias
   let primaryType: string = 'Calm Trader'
@@ -211,12 +239,12 @@ export function mapApiResponseToAnalysis(
       averageLoss,
       tradesPerHour,
       maxHourlyTrades,
-      totalProfitLoss: apiResponse.summary.total_profit_loss ?? cumulative,
+      totalProfitLoss: apiResponse.summary.total_profit_loss ?? cumulativePnLRaw[cumulativePnLRaw.length - 1] ?? 0,
     },
     chartData: {
       cumulativePnL,
       hourlyActivity,
     },
-    trades,  // Include trades for detailed visualization
+    trades: chartTrades,
   }
 }

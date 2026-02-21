@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react'
 import type { AnalysisResult, BiasKey, SessionHistoryItem } from './types'
 
 const round = (value: number) => Math.round(value * 100) / 100
@@ -26,17 +27,17 @@ interface AnalysisPageProps {
 
 /* ─── SVG sub-components ─── */
 
-function CumulativePnLChart({ values }: { values: number[] }) {
+const CumulativePnLChart = memo(function CumulativePnLChart({ values }: { values: number[] }) {
     if (values.length < 2) return <p className="empty-state">Need at least 2 records.</p>
 
-    // Downsample to max 200 points for performance
-    const MAX_PTS = 200
-    const sampled = values.length <= MAX_PTS ? values : (() => {
+    const sampled = useMemo(() => {
+        const MAX_PTS = 200
+        if (values.length <= MAX_PTS) return values
         const step = (values.length - 1) / (MAX_PTS - 1)
         const out: number[] = []
-        for (let i = 0; i < MAX_PTS; i++) out.push(values[Math.round(i * step)])
+        for (let i = 0; i < MAX_PTS; i += 1) out.push(values[Math.round(i * step)])
         return out
-    })()
+    }, [values])
 
     const W = 560, H = 200, PAD = { t: 16, r: 16, b: 28, l: 52 }
     const plotW = W - PAD.l - PAD.r, plotH = H - PAD.t - PAD.b
@@ -95,9 +96,9 @@ function CumulativePnLChart({ values }: { values: number[] }) {
             </text>
         </svg>
     )
-}
+})
 
-function BiasScoresChart({ biases }: { biases: AnalysisResult['biases'] }) {
+const BiasScoresChart = memo(function BiasScoresChart({ biases }: { biases: AnalysisResult['biases'] }) {
     const W = 560, H = 200, PAD = { t: 14, r: 24, b: 10, l: 140 }
     const plotW = W - PAD.l - PAD.r
     const keys = Object.keys(BIAS_LABELS) as BiasKey[]
@@ -129,9 +130,9 @@ function BiasScoresChart({ biases }: { biases: AnalysisResult['biases'] }) {
             })}
         </svg>
     )
-}
+})
 
-function HourlyActivityChart({ data }: { data: number[] }) {
+const HourlyActivityChart = memo(function HourlyActivityChart({ data }: { data: number[] }) {
     const W = 560, H = 180, PAD = { t: 14, r: 12, b: 28, l: 32 }
     const plotW = W - PAD.l - PAD.r, plotH = H - PAD.t - PAD.b
     const max = Math.max(...data, 1)
@@ -171,9 +172,9 @@ function HourlyActivityChart({ data }: { data: number[] }) {
             })}
         </svg>
     )
-}
+})
 
-function WinLossDonut({ winRate, totalTrades }: { winRate: number; totalTrades: number }) {
+const WinLossDonut = memo(function WinLossDonut({ winRate, totalTrades }: { winRate: number; totalTrades: number }) {
     const size = 160, cx = size / 2, cy = size / 2, r = 56, stroke = 14
     const wins = Math.round((winRate / 100) * totalTrades)
     const losses = totalTrades - wins
@@ -208,9 +209,9 @@ function WinLossDonut({ winRate, totalTrades }: { winRate: number; totalTrades: 
             </div>
         </div>
     )
-}
+})
 
-function PnLDistribution({ trades }: { trades: AnalysisResult['trades'] }) {
+const PnLDistribution = memo(function PnLDistribution({ trades }: { trades: AnalysisResult['trades'] }) {
     if (!trades || trades.length < 2) return <p className="empty-state">Not enough data.</p>
 
     const pnls = trades.map(t => t.profitLoss ?? 0).filter(v => v !== 0)
@@ -252,10 +253,11 @@ function PnLDistribution({ trades }: { trades: AnalysisResult['trades'] }) {
             <text x={W / 2} y={H - 4} textAnchor="middle" fontSize="9" fill="var(--ink-500)">P/L →</text>
         </svg>
     )
-}
+})
 
 export default function AnalysisPage({ analysis, history, onBack, onSave, onLoadHistory }: AnalysisPageProps) {
     const totalPnL = analysis.metrics.totalProfitLoss
+    const biasKeys = useMemo(() => Object.keys(BIAS_LABELS) as BiasKey[], [])
 
     return (
         <>
@@ -307,7 +309,7 @@ export default function AnalysisPage({ analysis, history, onBack, onSave, onLoad
                     </p>
 
                     <div className="bias-grid">
-                        {(Object.keys(BIAS_LABELS) as BiasKey[]).map((key) => {
+                        {biasKeys.map((key) => {
                             const { label, color, icon } = BIAS_LABELS[key]
                             const bias = analysis.biases[key]
                             return (
@@ -341,6 +343,11 @@ export default function AnalysisPage({ analysis, history, onBack, onSave, onLoad
                         <article className="chart-card chart-wide">
                             <h3>📈 Cumulative P/L Timeline</h3>
                             <CumulativePnLChart values={analysis.chartData.cumulativePnL} />
+                        </article>
+
+                        <article className="chart-card chart-wide">
+                            <h3>Bias Score Comparison</h3>
+                            <BiasScoresChart biases={analysis.biases} />
                         </article>
 
                         {/* Row 2: Hourly Activity + Win/Loss */}

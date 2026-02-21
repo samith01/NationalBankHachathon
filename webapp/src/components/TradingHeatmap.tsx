@@ -1,325 +1,227 @@
-import { useState, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { Trade } from '../types'
 
 type DensityMode = 'trades' | 'pnl' | 'avgPnl'
 type ColumnMode = '1hour' | '2hour' | '4hour' | 'session'
-type RowMode = 'dayOfWeek' | 'byDate'
-
-interface HeatmapCell {
-    value: number
-    count: number
-    label: string
-}
 
 interface TradingHeatmapProps {
-    trades: Trade[]
+  trades: Trade[]
 }
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const HOURS_24 = Array.from({ length: 24 }, (_, i) => i)
 
-export default function TradingHeatmap({ trades }: TradingHeatmapProps) {
-    const [densityMode, setDensityMode] = useState<DensityMode>('pnl')
-    const [columnMode, setColumnMode] = useState<ColumnMode>('1hour')
-    const [rowMode, setRowMode] = useState<RowMode>('dayOfWeek')
-
-    const formatCellLabel = (col: number, mode: ColumnMode): string => {
-        switch (mode) {
-            case '1hour':
-                return col.toString().padStart(2, '0')
-            case '2hour':
-                return `${(col * 2).toString().padStart(2, '0')}`
-            case '4hour':
-                return `${(col * 4).toString().padStart(2, '0')}`
-            case 'session':
-                return ['Asian', 'European', 'US', 'After'][col] || ''
-        }
-    }
-
-    const heatmapData = useMemo(() => {
-        if (!trades.length) return { data: [], maxValue: 0, minValue: 0 }
-
-        const cellData = new Map<string, { sum: number; count: number }>()
-
-        trades.forEach((trade) => {
-            const date = new Date(trade.timestamp)
-            if (Number.isNaN(date.getTime())) return
-
-            const dayOfWeek = date.getDay()
-            const hour = date.getHours()
-            const pnl = trade.profitLoss ?? 0
-
-            // Determine column based on mode
-            let colKey: number
-            switch (columnMode) {
-                case '1hour':
-                    colKey = hour
-                    break
-                case '2hour':
-                    colKey = Math.floor(hour / 2)
-                    break
-                case '4hour':
-                    colKey = Math.floor(hour / 4)
-                    break
-                case 'session':
-                    // 4 sessions: Asian (0-6), European (6-12), US (12-18), After-hours (18-24)
-                    if (hour < 6) colKey = 0
-                    else if (hour < 12) colKey = 1
-                    else if (hour < 18) colKey = 2
-                    else colKey = 3
-                    break
-            }
-
-            // Determine row based on mode
-            let rowKey: number | string
-            if (rowMode === 'dayOfWeek') {
-                rowKey = dayOfWeek
-            } else {
-                // By date: YYYY-MM-DD
-                rowKey = date.toISOString().split('T')[0]
-            }
-
-            const key = `${rowKey}-${colKey}`
-            const existing = cellData.get(key) || { sum: 0, count: 0 }
-            cellData.set(key, {
-                sum: existing.sum + pnl,
-                count: existing.count + 1,
-            })
-        })
-
-        // Convert to array format
-        const rows = rowMode === 'dayOfWeek' ? DAYS_OF_WEEK.length : Array.from(new Set(
-            Array.from(cellData.keys()).map(k => k.split('-')[0])
-        )).length
-
-        let cols: number
-        switch (columnMode) {
-            case '1hour':
-                cols = 24
-                break
-            case '2hour':
-                cols = 12
-                break
-            case '4hour':
-                cols = 6
-                break
-            case 'session':
-                cols = 4
-                break
-        }
-
-        const grid: HeatmapCell[][] = []
-        let maxValue = -Infinity
-        let minValue = Infinity
-
-        if (rowMode === 'dayOfWeek') {
-            for (let row = 0; row < 7; row++) {
-                const rowData: HeatmapCell[] = []
-                for (let col = 0; col < cols; col++) {
-                    const key = `${row}-${col}`
-                    const cell = cellData.get(key) || { sum: 0, count: 0 }
-                    
-                    let value: number
-                    switch (densityMode) {
-                        case 'trades':
-                            value = cell.count
-                            break
-                        case 'pnl':
-                            value = cell.sum
-                            break
-                        case 'avgPnl':
-                            value = cell.count > 0 ? cell.sum / cell.count : 0
-                            break
-                    }
-
-                    if (cell.count > 0) {
-                        maxValue = Math.max(maxValue, value)
-                        minValue = Math.min(minValue, value)
-                    }
-
-                    rowData.push({
-                        value,
-                        count: cell.count,
-                        label: formatCellLabel(col, columnMode),
-                    })
-                }
-                grid.push(rowData)
-            }
-        }
-
-        return { data: grid, maxValue, minValue, rows: rowMode === 'dayOfWeek' ? DAYS_OF_WEEK : [] }
-    }, [trades, densityMode, columnMode, rowMode])
-
-    const getCellColor = (value: number, count: number): { background: string; color: string } => {
-        if (count === 0) {
-            return { background: 'rgba(60, 61, 64, 0.1)', color: '#68727d' }
-        }
-
-        const { maxValue, minValue } = heatmapData
-        const absMax = Math.max(Math.abs(maxValue), Math.abs(minValue))
-
-        if (densityMode === 'trades') {
-            // Green gradient for trade count
-            const intensity = Math.min(1, value / absMax)
-            const green = Math.floor(135 + intensity * 60)
-            return {
-                background: `rgb(16, ${green}, 103)`,
-                color: intensity > 0.5 ? '#fff' : '#181c20',
-            }
-        } else {
-            // Red/Green for PnL
-            if (value > 0) {
-                const intensity = Math.min(1, value / absMax)
-                const green = Math.floor(122 + intensity * 100)
-                return {
-                    background: `rgb(16, ${green}, 103)`,
-                    color: intensity > 0.5 ? '#fff' : '#181c20',
-                }
-            } else if (value < 0) {
-                const intensity = Math.min(1, Math.abs(value) / absMax)
-                const red = Math.floor(180 + intensity * 75)
-                return {
-                    background: `rgb(${red}, ${Math.floor(40 - intensity * 30)}, ${Math.floor(40 - intensity * 30)})`,
-                    color: intensity > 0.5 ? '#fff' : '#181c20',
-                }
-            } else {
-                return { background: 'rgba(60, 61, 64, 0.15)', color: '#68727d' }
-            }
-        }
-    }
-
-    const formatValue = (value: number): string => {
-        if (densityMode === 'trades') {
-            return value.toString()
-        } else {
-            return value >= 0 ? `$${Math.round(value)}` : `-$${Math.round(Math.abs(value))}`
-        }
-    }
-
-    return (
-        <div className="trading-heatmap-container">
-            <div className="heatmap-header">
-                <h3>📊 Trading Activity Heatmap</h3>
-                <div className="heatmap-controls">
-                    <div className="control-group">
-                        <label>DENSITY:</label>
-                        <button
-                            className={densityMode === 'trades' ? 'active' : ''}
-                            onClick={() => setDensityMode('trades')}
-                            type="button"
-                        >
-                            Trades
-                        </button>
-                        <button
-                            className={densityMode === 'pnl' ? 'active' : ''}
-                            onClick={() => setDensityMode('pnl')}
-                            type="button"
-                        >
-                            PnL
-                        </button>
-                        <button
-                            className={densityMode === 'avgPnl' ? 'active' : ''}
-                            onClick={() => setDensityMode('avgPnl')}
-                            type="button"
-                        >
-                            Avg PnL
-                        </button>
-                    </div>
-
-                    <div className="control-group">
-                        <label>COLUMNS:</label>
-                        <button
-                            className={columnMode === '1hour' ? 'active' : ''}
-                            onClick={() => setColumnMode('1hour')}
-                            type="button"
-                        >
-                            1 Hour
-                        </button>
-                        <button
-                            className={columnMode === '2hour' ? 'active' : ''}
-                            onClick={() => setColumnMode('2hour')}
-                            type="button"
-                        >
-                            2 Hour
-                        </button>
-                        <button
-                            className={columnMode === '4hour' ? 'active' : ''}
-                            onClick={() => setColumnMode('4hour')}
-                            type="button"
-                        >
-                            4 Hour
-                        </button>
-                        <button
-                            className={columnMode === 'session' ? 'active' : ''}
-                            onClick={() => setColumnMode('session')}
-                            type="button"
-                        >
-                            Session
-                        </button>
-                    </div>
-
-                    <div className="control-group">
-                        <label>ROWS:</label>
-                        <button
-                            className={rowMode === 'dayOfWeek' ? 'active' : ''}
-                            onClick={() => setRowMode('dayOfWeek')}
-                            type="button"
-                        >
-                            Day of Week
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div className="heatmap-grid-wrapper">
-                {heatmapData.data.length > 0 ? (
-                    <div className="heatmap-grid" style={{ gridTemplateColumns: `80px repeat(${heatmapData.data[0].length}, 1fr)` }}>
-                        {/* Header row */}
-                        <div className="heatmap-cell header-cell"></div>
-                        {heatmapData.data[0].map((cell, colIdx) => (
-                            <div key={`header-${colIdx}`} className="heatmap-cell header-cell">
-                                {cell.label}
-                            </div>
-                        ))}
-
-                        {/* Data rows */}
-                        {heatmapData.data.map((row, rowIdx) => (
-                            <>
-                                <div key={`row-label-${rowIdx}`} className="heatmap-cell row-label">
-                                    {heatmapData.rows[rowIdx]}
-                                </div>
-                                {row.map((cell, colIdx) => {
-                                    const colors = getCellColor(cell.value, cell.count)
-                                    return (
-                                        <div
-                                            key={`${rowIdx}-${colIdx}`}
-                                            className="heatmap-cell data-cell"
-                                            style={{
-                                                background: colors.background,
-                                                color: colors.color,
-                                            }}
-                                            title={`${heatmapData.rows[rowIdx]} ${cell.label}: ${cell.count} trades, ${formatValue(cell.value)}`}
-                                        >
-                                            {cell.count > 0 ? formatValue(cell.value) : ''}
-                                        </div>
-                                    )
-                                })}
-                            </>
-                        ))}
-                    </div>
-                ) : (
-                    <p className="empty-state">No trading data available for heatmap</p>
-                )}
-            </div>
-
-            <div className="heatmap-legend">
-                <span className="legend-item">
-                    <span className="legend-box loss"></span> Loss
-                </span>
-                <span className="legend-item">
-                    <span className="legend-box profit"></span> Profit
-                </span>
-            </div>
-        </div>
-    )
+function getColumnCount(mode: ColumnMode): number {
+  if (mode === '1hour') return 24
+  if (mode === '2hour') return 12
+  if (mode === '4hour') return 6
+  return 4
 }
+
+function getColumnIndex(mode: ColumnMode, hour: number): number {
+  if (mode === '1hour') return hour
+  if (mode === '2hour') return Math.floor(hour / 2)
+  if (mode === '4hour') return Math.floor(hour / 4)
+  if (hour < 6) return 0
+  if (hour < 12) return 1
+  if (hour < 18) return 2
+  return 3
+}
+
+function formatCellLabel(col: number, mode: ColumnMode): string {
+  if (mode === '1hour') return col.toString().padStart(2, '0')
+  if (mode === '2hour') return (col * 2).toString().padStart(2, '0')
+  if (mode === '4hour') return (col * 4).toString().padStart(2, '0')
+  return ['Asian', 'European', 'US', 'After'][col] || ''
+}
+
+function TradingHeatmap({ trades }: TradingHeatmapProps) {
+  const [densityMode, setDensityMode] = useState<DensityMode>('pnl')
+  const [columnMode, setColumnMode] = useState<ColumnMode>('1hour')
+
+  const heatmapData = useMemo(() => {
+    const cols = getColumnCount(columnMode)
+    const labels = Array.from({ length: cols }, (_, col) => formatCellLabel(col, columnMode))
+
+    if (!trades.length) {
+      return {
+        cols,
+        labels,
+        values: new Float64Array(7 * cols),
+        counts: new Uint32Array(7 * cols),
+        maxValue: 0,
+        minValue: 0,
+      }
+    }
+
+    const sums = new Float64Array(7 * cols)
+    const counts = new Uint32Array(7 * cols)
+
+    for (const trade of trades) {
+      const date = new Date(trade.timestamp)
+      if (Number.isNaN(date.getTime())) continue
+
+      const row = date.getDay()
+      const col = getColumnIndex(columnMode, date.getHours())
+      const idx = row * cols + col
+      sums[idx] += trade.profitLoss ?? 0
+      counts[idx] += 1
+    }
+
+    const values = new Float64Array(7 * cols)
+    let maxValue = -Infinity
+    let minValue = Infinity
+
+    for (let idx = 0; idx < values.length; idx += 1) {
+      const count = counts[idx]
+      if (densityMode === 'trades') {
+        values[idx] = count
+      } else if (densityMode === 'avgPnl') {
+        values[idx] = count > 0 ? sums[idx] / count : 0
+      } else {
+        values[idx] = sums[idx]
+      }
+
+      if (count > 0) {
+        if (values[idx] > maxValue) maxValue = values[idx]
+        if (values[idx] < minValue) minValue = values[idx]
+      }
+    }
+
+    if (maxValue === -Infinity) {
+      maxValue = 0
+      minValue = 0
+    }
+
+    return { cols, labels, values, counts, maxValue, minValue }
+  }, [trades, densityMode, columnMode])
+
+  const getCellColor = (value: number, count: number): { background: string; color: string } => {
+    if (count === 0) return { background: 'rgba(60, 61, 64, 0.1)', color: '#68727d' }
+
+    const absMax = Math.max(Math.abs(heatmapData.maxValue), Math.abs(heatmapData.minValue), 1)
+
+    if (densityMode === 'trades') {
+      const intensity = Math.min(1, value / absMax)
+      const green = Math.floor(135 + intensity * 60)
+      return {
+        background: `rgb(16, ${green}, 103)`,
+        color: intensity > 0.5 ? '#fff' : '#181c20',
+      }
+    }
+
+    if (value > 0) {
+      const intensity = Math.min(1, value / absMax)
+      const green = Math.floor(122 + intensity * 100)
+      return {
+        background: `rgb(16, ${green}, 103)`,
+        color: intensity > 0.5 ? '#fff' : '#181c20',
+      }
+    }
+
+    if (value < 0) {
+      const intensity = Math.min(1, Math.abs(value) / absMax)
+      const red = Math.floor(180 + intensity * 75)
+      const low = Math.max(0, Math.floor(40 - intensity * 30))
+      return {
+        background: `rgb(${red}, ${low}, ${low})`,
+        color: intensity > 0.5 ? '#fff' : '#181c20',
+      }
+    }
+
+    return { background: 'rgba(60, 61, 64, 0.15)', color: '#68727d' }
+  }
+
+  const formatValue = (value: number): string => {
+    if (densityMode === 'trades') return value.toString()
+    return value >= 0 ? `$${Math.round(value)}` : `-$${Math.round(Math.abs(value))}`
+  }
+
+  return (
+    <div className="trading-heatmap-container">
+      <div className="heatmap-header">
+        <h3>📊 Trading Activity Heatmap</h3>
+        <div className="heatmap-controls">
+          <div className="control-group">
+            <label>DENSITY:</label>
+            <button className={densityMode === 'trades' ? 'active' : ''} onClick={() => setDensityMode('trades')} type="button">
+              Trades
+            </button>
+            <button className={densityMode === 'pnl' ? 'active' : ''} onClick={() => setDensityMode('pnl')} type="button">
+              PnL
+            </button>
+            <button className={densityMode === 'avgPnl' ? 'active' : ''} onClick={() => setDensityMode('avgPnl')} type="button">
+              Avg PnL
+            </button>
+          </div>
+
+          <div className="control-group">
+            <label>COLUMNS:</label>
+            <button className={columnMode === '1hour' ? 'active' : ''} onClick={() => setColumnMode('1hour')} type="button">
+              1 Hour
+            </button>
+            <button className={columnMode === '2hour' ? 'active' : ''} onClick={() => setColumnMode('2hour')} type="button">
+              2 Hour
+            </button>
+            <button className={columnMode === '4hour' ? 'active' : ''} onClick={() => setColumnMode('4hour')} type="button">
+              4 Hour
+            </button>
+            <button className={columnMode === 'session' ? 'active' : ''} onClick={() => setColumnMode('session')} type="button">
+              Session
+            </button>
+          </div>
+
+          <div className="control-group">
+            <label>ROWS:</label>
+            <button className="active" type="button">
+              Day of Week
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="heatmap-grid-wrapper">
+        <div className="heatmap-grid" style={{ gridTemplateColumns: `80px repeat(${heatmapData.cols}, 1fr)` }}>
+          <div className="heatmap-cell header-cell"></div>
+          {heatmapData.labels.map((label, colIdx) => (
+            <div key={`header-${colIdx}`} className="heatmap-cell header-cell">
+              {label}
+            </div>
+          ))}
+
+          {DAYS_OF_WEEK.map((day, rowIdx) => (
+            <div key={day} style={{ display: 'contents' }}>
+              <div className="heatmap-cell row-label">{day}</div>
+              {Array.from({ length: heatmapData.cols }, (_, colIdx) => {
+                const idx = rowIdx * heatmapData.cols + colIdx
+                const value = heatmapData.values[idx]
+                const count = heatmapData.counts[idx]
+                const colors = getCellColor(value, count)
+                return (
+                  <div
+                    key={`${rowIdx}-${colIdx}`}
+                    className="heatmap-cell data-cell"
+                    style={{ background: colors.background, color: colors.color }}
+                    title={`${day} ${heatmapData.labels[colIdx]}: ${count} trades, ${formatValue(value)}`}
+                  >
+                    {count > 0 ? formatValue(value) : ''}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="heatmap-legend">
+        <span className="legend-item">
+          <span className="legend-box loss"></span> Loss
+        </span>
+        <span className="legend-item">
+          <span className="legend-box profit"></span> Profit
+        </span>
+      </div>
+    </div>
+  )
+}
+
+export default memo(TradingHeatmap)

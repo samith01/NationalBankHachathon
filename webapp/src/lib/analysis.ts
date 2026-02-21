@@ -343,6 +343,7 @@ export const analyzeTrades = (trades: Trade[]): AnalysisResult => {
       averageLoss: Math.abs(average(losses)),
       tradesPerHour: trades.length / spanHours,
       maxHourlyTrades: Math.max(...hourlyActivity),
+      totalProfitLoss: running,
     },
     chartData: {
       cumulativePnL,

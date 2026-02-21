@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import './index.css'
 import AnalysisPage from './AnalysisPage'
 import { API_BASE_URL, analyzeTrading, getTrades, mapApiResponseToAnalysis, uploadTradingHistory } from './lib/api'
-import type { AnalysisResult, SessionHistoryItem, Trade, TraderType } from './types'
+import type { AnalysisResult, SessionHistoryItem, TraderType } from './types'
 
 const HISTORY_KEY = 'nb-bias-detector-history-v1'
 
@@ -18,7 +18,7 @@ type Page = 'home' | 'analysis'
 function App() {
   const [page, setPage] = useState<Page>('home')
   const [isParsing, setIsParsing] = useState(false)
-  const [trades, setTrades] = useState<Trade[]>([])
+  const [tradesCount, setTradesCount] = useState(0)
   const [parseIssues, setParseIssues] = useState<string[]>([])
   const [history, setHistory] = useState<SessionHistoryItem[]>([])
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
@@ -44,17 +44,17 @@ function App() {
     try {
       // Upload file directly to API
       const sessionId = await uploadTradingHistory(file)
-      
-      // Get analysis from API
-      const apiResponse = await analyzeTrading(sessionId)
-      
-      // Get trade data from API
-      const fetchedTrades = await getTrades(sessionId)
+
+      // Avoid waterfall: fetch both endpoints in parallel
+      const [apiResponse, fetchedTrades] = await Promise.all([
+        analyzeTrading(sessionId),
+        getTrades(sessionId),
+      ])
       
       // Map API response to frontend format
       const result = mapApiResponseToAnalysis(apiResponse, fetchedTrades)
       
-      setTrades(fetchedTrades)
+      setTradesCount(fetchedTrades.length)
       setAnalysis(result)
       
       if (result) {
@@ -64,7 +64,7 @@ function App() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to analyze trades'
       setParseIssues([`API Error: ${errorMessage}. Backend URL: ${API_BASE_URL}`])
-      setTrades([])
+      setTradesCount(0)
       setAnalysis(null)
     } finally {
       setIsParsing(false)
@@ -73,13 +73,14 @@ function App() {
   }
 
   const saveSession = () => {
-    if (!analysis || !trades.length) return
+    if (!analysis) return
+    const { trades: _trades, ...analysisForHistory } = analysis
     const newItem: SessionHistoryItem = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       traderType: analysis.traderType,
-      tradesCount: trades.length,
-      analysis,
+      tradesCount: tradesCount || analysis.metrics.totalTrades,
+      analysis: analysisForHistory as AnalysisResult,
     }
     const updated = [newItem, ...history].slice(0, 8)
     setHistory(updated)
@@ -89,7 +90,7 @@ function App() {
   const goHome = () => {
     setPage('home')
     setAnalysis(null)
-    setTrades([])
+    setTradesCount(0)
     setParseIssues([])
     window.scrollTo(0, 0)
   }
