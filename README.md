@@ -241,6 +241,15 @@ The model is evaluated on:
 - Node.js 18+
 - `uv` (preferred)
 
+### One-command Docker setup
+```bash
+docker compose up --build
+```
+
+This starts:
+- Backend API at `http://localhost:8000`
+- Frontend at `http://localhost:5173`
+
 ### Python setup (preferred: uv)
 ```bash
 cd app

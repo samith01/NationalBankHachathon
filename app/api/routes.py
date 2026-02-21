@@ -17,6 +17,7 @@ from .data_service import (
     get_trades_in_range,
     optional_float,
     parse_csv_file,
+    parse_csv_file_with_summary,
     record_to_trade_entry,
     timestamp_to_iso,
     validate_required_columns,
@@ -25,6 +26,7 @@ from .schemas import (
     AnalysisResponse,
     BalancePoint,
     BiasSummary,
+    CsvProcessingSummary,
     DataResponse,
     ExcludeCriteria,
     MetricsResponse,
@@ -55,13 +57,37 @@ router = APIRouter()
     description="Upload a CSV file containing trading history for analysis",
 )
 async def upload_trade_history(file: UploadFile = File(...)):
-    session_id = str(uuid.uuid4())
-    content = await file.read()
-    uploaded_files[session_id] = content
-    return UploadResponse(
-        session_id=session_id,
-        message=f"Trade history uploaded successfully. Session ID: {session_id}",
-    )
+    try:
+        session_id = str(uuid.uuid4())
+        content = await file.read()
+        df, csv_summary = parse_csv_file_with_summary(
+            content,
+            source_name=file.filename or "uploaded.csv",
+        )
+        if csv_summary.error_message:
+            raise HTTPException(status_code=400, detail=csv_summary.error_message)
+        validate_required_columns(df)
+
+        uploaded_files[session_id] = df.write_csv().encode("utf-8")
+        return UploadResponse(
+            session_id=session_id,
+            message=f"Trade history uploaded successfully. Session ID: {session_id}",
+            csv_summary=CsvProcessingSummary(
+                status=csv_summary.status,
+                source_name=csv_summary.source_name,
+                empty_cells=csv_summary.empty_cells,
+                quantity_fills=csv_summary.quantity_fills,
+                entry_fills=csv_summary.entry_fills,
+                exit_fills=csv_summary.exit_fills,
+                profit_fixes=csv_summary.profit_fixes,
+                balance_fixes=csv_summary.balance_fixes,
+                warnings=csv_summary.warnings,
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Error parsing CSV: {str(exc)}")
 
 
 @router.get(

@@ -46,9 +46,22 @@ class TraderAnalysis(TypedDict):
     all_bias_scores: dict[str, float]
 
 
+class CsvProcessingSummary(BaseModel):
+    status: str
+    source_name: str
+    empty_cells: int
+    quantity_fills: int
+    entry_fills: int
+    exit_fills: int
+    profit_fixes: int
+    balance_fixes: int
+    warnings: List[str]
+
+
 class UploadResponse(BaseModel):
     session_id: str
     message: str
+    csv_summary: Optional[CsvProcessingSummary] = None
 
 
 class TradeEntry(BaseModel):

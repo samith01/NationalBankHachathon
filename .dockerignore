@@ -1,0 +1,14 @@
+.git
+.gitignore
+.vscode
+.agent
+.agents
+.opencode
+.ruff_cache
+**/__pycache__
+**/.ruff_cache
+**/.venv
+app/.python-version
+webapp/node_modules
+webapp/dist
+datasets/patched

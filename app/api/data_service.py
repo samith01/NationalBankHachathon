@@ -1,17 +1,26 @@
-import io
 from datetime import date, datetime, time
 
 import numpy as np
 import polars as pl
 from fastapi import HTTPException
 
+from .csv_sanitizer import CsvAnalysisSummary, load_csv
 from .schemas import ScalarValue, TradeEntry, TradeRecord
 from .state import uploaded_files
 
 
 def parse_csv_file(file_content: bytes) -> pl.DataFrame:
+    df, summary = parse_csv_file_with_summary(file_content)
+    if summary.error_message:
+        raise HTTPException(status_code=400, detail=summary.error_message)
+    return df
+
+
+def parse_csv_file_with_summary(
+    file_content: bytes, *, source_name: str = "uploaded.csv"
+) -> tuple[pl.DataFrame, CsvAnalysisSummary]:
     try:
-        return pl.read_csv(io.StringIO(file_content.decode("utf-8")))
+        return load_csv(file_content.decode("utf-8"), source_name=source_name)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Error parsing CSV: {str(exc)}")
 

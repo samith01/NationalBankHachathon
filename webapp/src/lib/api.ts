@@ -1,6 +1,6 @@
 import type { AnalysisResult, Trade } from '../types'
 
-const API_BASE_URL = 'https://zz3cbgfn-8000.use.devtunnels.ms'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 interface UploadResponse {
   session_id: string
