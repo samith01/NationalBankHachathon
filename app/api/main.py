@@ -1,9 +1,15 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
+import sys
 from typing import AsyncIterator
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+if __name__ == "__main__" and (__package__ is None or __package__ == ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    __package__ = "app.api"
 
 from .routes import router
 from .state import load_model
