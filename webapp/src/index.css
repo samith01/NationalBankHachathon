@@ -178,8 +178,6 @@ select {
 .layout {
   width: min(1180px, 100% - 2rem);
   margin: 1.1rem auto 2.5rem;
-  display: grid;
-  gap: 1rem;
 }
 
 .card {
