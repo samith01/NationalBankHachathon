@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { AnalysisResult, SessionHistoryItem } from './types'
+import TradingHeatmap from './components/TradingHeatmap'
 
 const round = (value: number) => Math.round(value * 100) / 100
 
@@ -93,27 +94,14 @@ export default function AnalysisPage({ analysis, history, onBack, onSave, onLoad
                                 <p className="empty-state">Need at least 2 records to render the timeline.</p>
                             )}
                         </article>
-
-                        <article className="chart-card">
-                            <h3>Trading Heatmap by Hour</h3>
-                            <div className="heatmap-grid">
-                                {analysis.chartData.hourlyActivity.map((count, hour) => {
-                                    const intensity = Math.min(1, count / Math.max(1, analysis.metrics.maxHourlyTrades))
-                                    return (
-                                        <div
-                                            className="heatmap-cell"
-                                            key={hour}
-                                            style={{ opacity: 0.22 + intensity * 0.78 }}
-                                            title={`${hour.toString().padStart(2, '0')}:00 — ${count} trades`}
-                                        >
-                                            <span>{hour}</span>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </article>
                     </div>
                 </section>
+
+                {analysis.trades && analysis.trades.length > 0 && (
+                    <section id="trading-heatmap" className="card">
+                        <TradingHeatmap trades={analysis.trades} />
+                    </section>
+                )}
 
                 <section id="coaching-plan" className="card recommendations">
                     <h2>Personalized Coaching</h2>

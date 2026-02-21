@@ -1,6 +1,6 @@
 import type { AnalysisResult, Trade } from '../types'
 
-const API_BASE_URL = 'http://localhost:8000'
+const API_BASE_URL = 'https://100.101.121.98:8000'
 
 interface UploadResponse {
   session_id: string
@@ -202,5 +202,6 @@ export function mapApiResponseToAnalysis(
       cumulativePnL,
       hourlyActivity,
     },
+    trades,  // Include trades for detailed visualization
   }
 }

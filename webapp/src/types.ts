@@ -54,6 +54,7 @@ export interface AnalysisResult {
     cumulativePnL: number[]
     hourlyActivity: number[]
   }
+  trades?: Trade[]  // Store trades for detailed analysis
 }
 
 export interface SessionHistoryItem {

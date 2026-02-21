@@ -11,16 +11,16 @@ print("=" * 80)
 
 # Load datasets
 print("\n📊 Loading datasets...")
-calm = pd.read_csv('../../datasets/calm_trader.csv')
+calm = pd.read_csv('../../datasets/patched/calm_trader.csv')
 calm['trader_type'] = 0
 
-loss_averse = pd.read_csv('../../datasets/loss_averse_trader.csv')
+loss_averse = pd.read_csv('../../datasets/patched/loss_averse_trader.csv')
 loss_averse['trader_type'] = 1
 
-overtrader = pd.read_csv('../../datasets/overtrader.csv')
+overtrader = pd.read_csv('../../datasets/patched/overtrader.csv')
 overtrader['trader_type'] = 2
 
-revenge = pd.read_csv('../../datasets/revenge_trader.csv')
+revenge = pd.read_csv('../../datasets/patched/revenge_trader.csv')
 revenge['trader_type'] = 3
 
 # Combine
