@@ -172,8 +172,7 @@ function App() {
                     <li>Missing values are flagged under Data Integrity Notes.</li>
                   </ul>
                   <p>
-                    This keeps the workflow simple and aligned with the challenge: file-based trading history input and
-                    fast personalized analysis.
+                    Example: 2025-03-01 9:30,NFLX,SELL,4,1754.20,1756.06,7.36,10007.36
                   </p>
                 </article>
               </div>
