@@ -50,6 +50,7 @@ type Page = 'home' | 'analysis'
 function App() {
   const [page, setPage] = useState<Page>('home')
   const [isParsing, setIsParsing] = useState(false)
+  const [fileInputKey, setFileInputKey] = useState(0)
   const [tradesCount, setTradesCount] = useState(0)
   const [parseIssues, setParseIssues] = useState<string[]>([])
   const [history, setHistory] = useState<SessionHistoryItem[]>([])
@@ -60,7 +61,10 @@ function App() {
   }, [])
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    if (isParsing) return
+
+    const input = event.currentTarget
+    const file = input.files?.[0]
     if (!file) return
 
     setIsParsing(true)
@@ -93,7 +97,8 @@ function App() {
       setAnalysis(null)
     } finally {
       setIsParsing(false)
-      event.target.value = ''
+      input.value = ''
+      setFileInputKey((v) => v + 1)
     }
   }
 
@@ -181,6 +186,7 @@ function App() {
                   <strong>{isParsing ? 'Reading File…' : 'Upload Trading File'}</strong>
                   <span>Drop a `.csv`, `.xls`, or `.xlsx` file with your trading history.</span>
                   <input
+                    key={fileInputKey}
                     className="file-input"
                     type="file"
                     name="trade-file"
