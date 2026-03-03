@@ -1,6 +1,12 @@
+from pathlib import Path
+
 import numpy as np
 import polars as pl
 import xgboost as xgb
+
+MLTRAINING_DIR = Path(__file__).resolve().parent
+PATCHED_DATASETS_DIR = MLTRAINING_DIR.parents[1] / "datasets" / "patched"
+MODEL_PATH = MLTRAINING_DIR / "trader_classifier.json"
 
 
 def prepare_features(df: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:
@@ -157,21 +163,28 @@ def train_test_split(
 
 
 def main() -> None:
-    calm = pl.read_csv("../../datasets/patched/calm_trader.csv").with_columns(
+    calm = pl.read_csv(PATCHED_DATASETS_DIR / "calm_trader.csv").with_columns(
         pl.lit(0).alias("trader_type")
     )
-    loss_averse = pl.read_csv("../../datasets/patched/loss_averse_trader.csv").with_columns(
+    loss_averse = pl.read_csv(PATCHED_DATASETS_DIR / "loss_averse_trader.csv").with_columns(
         pl.lit(1).alias("trader_type")
     )
-    overtrader = pl.read_csv("../../datasets/patched/overtrader.csv").with_columns(
+    overtrader = pl.read_csv(PATCHED_DATASETS_DIR / "overtrader.csv").with_columns(
         pl.lit(2).alias("trader_type")
     )
-    revenge = pl.read_csv("../../datasets/patched/revenge_trader.csv").with_columns(
+    revenge = pl.read_csv(PATCHED_DATASETS_DIR / "revenge_trader.csv").with_columns(
         pl.lit(3).alias("trader_type")
     )
 
-    all_df = pl.concat([calm, loss_averse, overtrader, revenge], how="vertical")
-    x_matrix, y_values = prepare_features(all_df)
+    feature_sets: list[np.ndarray] = []
+    label_sets: list[np.ndarray] = []
+    for dataset in [calm, loss_averse, overtrader, revenge]:
+        dataset_x, dataset_y = prepare_features(dataset)
+        feature_sets.append(dataset_x)
+        label_sets.append(dataset_y)
+
+    x_matrix = np.vstack(feature_sets)
+    y_values = np.concatenate(label_sets)
     x_train, x_test, y_train, y_test = train_test_split(x_matrix, y_values, test_ratio=0.2, seed=42)
 
     dtrain = xgb.DMatrix(x_train, label=y_train)
@@ -200,8 +213,8 @@ def main() -> None:
     accuracy = float((preds == y_test).mean())
     print(f"Accuracy: {accuracy:.4f}")
 
-    booster.save_model("trader_classifier.json")
-    print("Saved trader_classifier.json")
+    booster.save_model(MODEL_PATH)
+    print(f"Saved {MODEL_PATH}")
 
 
 if __name__ == "__main__":

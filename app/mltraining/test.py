@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import numpy as np
 import polars as pl
@@ -11,8 +12,29 @@ TRADER_TYPES = {
     3: "revenge_trader",
 }
 
+MLTRAINING_DIR = Path(__file__).resolve().parent
+REPO_ROOT = MLTRAINING_DIR.parents[1]
+DATASETS_DIR = REPO_ROOT / "datasets"
+MODEL_PATH = MLTRAINING_DIR / "trader_classifier.json"
 
-def prepare_features(df: pl.DataFrame) -> np.ndarray:
+
+def resolve_csv_path(csv_file: str) -> Path:
+    candidate = Path(csv_file)
+    if candidate.is_file():
+        return candidate.resolve()
+
+    repo_relative = REPO_ROOT / candidate
+    if repo_relative.is_file():
+        return repo_relative.resolve()
+
+    dataset_name = DATASETS_DIR / candidate.name
+    if dataset_name.is_file():
+        return dataset_name.resolve()
+
+    raise FileNotFoundError(f"Could not find dataset: {csv_file}")
+
+
+def prepare_features(df: pl.DataFrame) -> tuple[np.ndarray, list[str]]:
     work_df = df.with_columns(
         pl.when(pl.col("profit_loss").is_null())
         .then(pl.col("exit_price") - pl.col("entry_price"))
@@ -127,26 +149,27 @@ def prepare_features(df: pl.DataFrame) -> np.ndarray:
         ]
     )
 
-    features = [
+    feature_names = [
         col
         for col in work_df.columns
         if col not in ["timestamp", "asset", "side", "profit_loss", "exit_price", "entry_price"]
     ]
     matrix = (
-        work_df.select(features)
+        work_df.select(feature_names)
         .with_columns(pl.all().cast(pl.Float64, strict=False))
         .fill_null(0.0)
         .to_numpy()
     )
-    return np.nan_to_num(matrix, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.nan_to_num(matrix, nan=0.0, posinf=0.0, neginf=0.0), feature_names
 
 
 def predict_trader_type(csv_file: str) -> None:
-    model = xgb.Booster(model_file="trader_classifier.json")
-    df = pl.read_csv(csv_file)
-    features = prepare_features(df)
+    csv_path = resolve_csv_path(csv_file)
+    model = xgb.Booster(model_file=MODEL_PATH)
+    df = pl.read_csv(csv_path)
+    features, feature_names = prepare_features(df)
 
-    probabilities = model.predict(xgb.DMatrix(features))
+    probabilities = model.predict(xgb.DMatrix(features, feature_names=feature_names))
     if probabilities.ndim == 1:
         probabilities = probabilities.reshape(-1, 1)
     predictions = np.argmax(probabilities, axis=1)
@@ -159,7 +182,7 @@ def predict_trader_type(csv_file: str) -> None:
     print(f"\n{'=' * 70}")
     print("TRADER TYPE PREDICTION RESULTS")
     print(f"{'=' * 70}")
-    print(f"File: {csv_file}")
+    print(f"File: {csv_path}")
     print(f"Total samples analyzed: {features.shape[0]}")
     print(f"\nPrimary trader type: {most_common_type}")
     print(f"Confidence: {confidence * 100:.2f}%")
