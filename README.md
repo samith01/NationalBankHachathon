@@ -11,9 +11,13 @@ There is no separate rules engine service in this codebase.
 
 ## Demo
 
-[![Sentinel Demo](https://img.youtube.com/vi/U0l-6MOTziM/0.jpg)](https://www.youtube.com/watch?v=U0l-6MOTziM)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=U0l-6MOTziM">
+    <img src="https://i.ytimg.com/vi/U0l-6MOTziM/hqdefault.jpg" alt="Sentinel demo video thumbnail" />
+  </a>
+</p>
 
-> ▶ [Watch on YouTube](https://www.youtube.com/watch?v=U0l-6MOTziM)
+> ▶ [Watch the demo on YouTube](https://www.youtube.com/watch?v=U0l-6MOTziM)
 
 ## What The App Does Today
 
