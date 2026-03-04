@@ -9,6 +9,12 @@ It has:
 
 There is no separate rules engine service in this codebase.
 
+## Demo
+
+[![Sentinel Demo](https://img.youtube.com/vi/U0l-6MOTziM/0.jpg)](https://www.youtube.com/watch?v=U0l-6MOTziM)
+
+> ▶ [Watch on YouTube](https://www.youtube.com/watch?v=U0l-6MOTziM)
+
 ## What The App Does Today
 
 ### Frontend (`webapp/`)
