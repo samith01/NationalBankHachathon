@@ -9,14 +9,6 @@ It has:
 
 There is no separate rules engine service in this codebase.
 
-## Demo
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=U0l-6MOTziM">
-    <img src="https://i.ytimg.com/vi/U0l-6MOTziM/hqdefault.jpg" alt="Sentinel demo video thumbnail" />
-  </a>
-</p>
-
 > ▶ [Watch the demo on YouTube](https://www.youtube.com/watch?v=U0l-6MOTziM)
 
 ## What The App Does Today
