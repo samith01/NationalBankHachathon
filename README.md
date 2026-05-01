@@ -1,4 +1,4 @@
-# Sentinel
+# Sentinel (3rd place Hackathon Winner)
 
 Sentinel is a hackathon project for detecting trading behavior patterns from trade history.
 
